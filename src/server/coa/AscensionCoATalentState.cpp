@@ -163,9 +163,17 @@ UploadedSpecialization SpecializationOf(std::vector<KnownEntry> const& upload)
 
 std::vector<KnownEntry> SpecializationSwitch(std::uint8_t classId, HasSpell const& hasSpell, std::uint32_t specId)
 {
+    std::unordered_set<std::uint32_t> departedSignatures;
+    for (AscensionCompatData::CoASpecialization const& specialization : AscensionCompatData::CoASpecializations)
+        if (specialization.ClassId == classId && specialization.SpecId != specId)
+            if (auto const* identity = FindEntry(specialization.IdentityEntryId);
+                identity && KnownRank(*identity, hasSpell))
+                departedSignatures.insert(specialization.SignatureEntryId);
+
     std::vector<KnownEntry> upload;
     for (KnownEntry const& known : KnownEntries(classId, hasSpell))
-        if (AscensionCompatData::CoATalentEntry const* entry = FindEntry(known.EntryId); entry && !entry->SpecId)
+        if (AscensionCompatData::CoATalentEntry const* entry = FindEntry(known.EntryId);
+            entry && !entry->SpecId && !departedSignatures.contains(known.EntryId))
             upload.push_back(known);
 
     for (AscensionCompatData::CoASpecialization const& specialization : AscensionCompatData::CoASpecializations)

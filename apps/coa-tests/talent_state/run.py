@@ -207,6 +207,26 @@ int main(int, char** argv)
         }
     }
 
+    CoATalentEntry const* sanguineIdentity = Find(4025);
+    CoATalentEntry const* sanguineSignature = Find(29543);
+    CoATalentEntry const* eternalSignature = Find(31117);
+    Check(sanguineIdentity && sanguineSignature && eternalSignature,
+          "Bloodmage archetypes have their native identity and shared signature entries");
+    if (sanguineIdentity && sanguineSignature && eternalSignature)
+    {
+        std::set<std::uint32_t> spellbook = { sanguineIdentity->SpellIds[0], sanguineSignature->SpellIds[0] };
+        std::vector<KnownEntry> const entering = SpecializationSwitch(20,
+            [&spellbook](std::uint32_t id) { return spellbook.contains(id); }, 99);
+        Check(std::none_of(entering.begin(), entering.end(),
+                  [](KnownEntry const& item) { return item.EntryId == 29543; }),
+              "leaving Sanguine removes its shared signature from the native upload");
+        Check(std::any_of(entering.begin(), entering.end(),
+                  [](KnownEntry const& item) { return item.EntryId == 31117 && item.Rank == 1; }),
+              "entering Eternal uploads Blood Pact at rank one");
+        Check(Spent(entering).AE == 1 && Spent(entering).TE == 0,
+              "a native Bloodmage archetype switch fits the level-eleven point budget");
+    }
+
     return failures ? 1 : 0;
 }
 """

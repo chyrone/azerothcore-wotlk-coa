@@ -1647,16 +1647,9 @@ public:
 
     uint32 const activeSpecialization = GetActiveSpecialization(player);
     bool const switching = uploaded.SpecId && uploaded.SpecId != activeSpecialization;
-    if (switching && !uploaded.ChoosesTalents && activeSpecialization)
-    {
-      std::string reason;
-      if (SwitchSpecialization(player, uploaded.SpecId, &reason))
-        return true;
-      refusal = SpecializationSwitchRefused(uploaded.SpecId, std::move(reason));
-      return false;
-    }
-
     std::unordered_map<uint32, uint32> wanted;
+    std::unordered_set<uint32> received;
+    std::unordered_set<uint32> selectedGroups;
     for (AscensionCoATalentState::KnownEntry const& item : upload)
     {
       AscensionCompatData::CoATalentEntry const* entry = FindTalentEntry(item.EntryId);
@@ -1666,8 +1659,12 @@ public:
                     Acore::StringFormat("Talent entry {} does not belong to your custom class.", item.EntryId) };
         return false;
       }
-      if (!entry->AECost && !entry->TECost && !GetSelectableFreeGroup(entry->EntryId))
-        continue;
+      if (!received.insert(item.EntryId).second)
+      {
+        refusal = { "CA_UPDATE_ENTRIES_BAD_ENTRY", "", item.EntryId, item.Rank,
+                    "The uploaded build repeats a talent entry." };
+        return false;
+      }
       if (item.Rank > entry->SpellCount)
       {
         refusal = { "CA_UPDATE_ENTRIES_BAD_ENTRY", "", entry->EntryId, item.Rank,
@@ -1692,7 +1689,21 @@ public:
           return false;
         }
       }
-      wanted[entry->EntryId] = item.Rank;
+      if (item.Rank && entry->SpecId && entry->SpecId != (uploaded.SpecId ? uploaded.SpecId : activeSpecialization))
+      {
+        refusal = { "CA_UPDATE_ENTRIES_BAD_ENTRY", "CA_LEARN_WRONG_CLASS", item.EntryId, item.Rank,
+                    "The uploaded build includes an entry of another specialization." };
+        return false;
+      }
+      if (uint32 const group = GetSelectableFreeGroup(item.EntryId); item.Rank && group &&
+          !selectedGroups.insert(group).second)
+      {
+        refusal = { "CA_UPDATE_ENTRIES_NOT_TRAVERSIBLE", "CA_LEARN_GROUP", item.EntryId, item.Rank,
+                    "The uploaded build selects mutually exclusive talents." };
+        return false;
+      }
+      if (entry->AECost || entry->TECost || GetSelectableFreeGroup(entry->EntryId))
+        wanted[entry->EntryId] = item.Rank;
     }
 
     std::vector<AscensionCoATalentState::KnownEntry> priced;
@@ -1729,6 +1740,12 @@ public:
       refusal = SpecializationSwitchRefused(uploaded.SpecId, std::move(reason));
       return false;
     }
+
+    if (switching && !uploaded.ChoosesTalents && activeSpecialization)
+      for (AscensionCoATalentState::KnownEntry const& known : KnownTalentEntries(player))
+        if (auto const* entry = FindTalentEntry(known.EntryId); entry && entry->SpecId == uploaded.SpecId &&
+            (entry->AECost || entry->TECost || GetSelectableFreeGroup(entry->EntryId)))
+          wanted[entry->EntryId] = known.Rank;
 
     std::vector<std::pair<AscensionCompatData::CoATalentEntry const*, uint32>> changes;
     for (AscensionCompatData::CoATalentEntry const& entry : AscensionCompatData::CoATalentEntries)

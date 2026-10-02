@@ -84,16 +84,19 @@ Opcodes and layouts come from the reconstructed `Extensions.dll` (`firstoni-dev/
   it drops the old specialization's entries and adds the new identity entry and the entry of the
   specialization's signature spell (`ChrSpecs` +0x60, `SignatureEntryId`). `SpecializationOf` reads the
   specialization from the upload's ranked specialization entries; entries of two specializations refuse it.
-  A specialization other than the active one, with no paid or free-choice entry of it, is a switch:
-  `SwitchSpecialization` runs, restores that specialization's stored build, and the rest of the upload is
-  ignored. With such entries the switch runs first and the upload then applies as the complete set. Otherwise
-  `ApplyKnownEntriesUpload` checks every entry, prices the state the set leads to (including ranks the
+  `ApplyKnownEntriesUpload` validates every row and the budget before switching. A specialization other than
+  the active one, with no paid or free-choice entry of it, restores that specialization's stored purchases
+  through `SwitchSpecialization`; the upload still replaces the shared class tree, including its signature.
+  With such entries the switch runs first and the upload applies as the complete set. The native switch
+  helper also removes the departed specialization's shared signature, matching the DLL's `LeaveSpec`.
+  The server prices the state the set leads to (including ranks the
   progression pass hands back to omitted entries) and applies removals before additions through
   `SetTalentRank`; an upload that changes nothing still runs the progression pass. Any failure refuses the
   whole upload. 0x0726 always follows, then `SMSG 0x072C` {result, learn result, u32 entry, u32 rank}
   (`CHARACTER_ADVANCEMENT_UPDATE_ENTRIES_RESULT`): `CA_UPDATE_ENTRIES_OK`, or `_BAD_ENTRY` (unknown or
   foreign entry, rank past the entry, missing server spell, mixed or invalid specialization),
-  `_NOT_TRAVERSIBLE` (`CA_LEARN_LOW_LEVEL`, `CA_LEARN_MISSING_AE` / `_TE` over budget) or `_UNKNOWN`
+  `_NOT_TRAVERSIBLE` (`CA_LEARN_LOW_LEVEL`, `CA_LEARN_GROUP` for mutually exclusive free choices,
+  `CA_LEARN_MISSING_AE` / `_TE` over budget) or `_UNKNOWN`
   (malformed upload, missing budget row). The CoA frame plays its apply sound on success; the general CA
   frame shows a refusal as a red error.
 - `CMSG_UNLEARN_TALENTS` (0x0213, `C_CharacterAdvancement.UnlearnAllTalents`): queued with the uploads in
