@@ -47,6 +47,52 @@ bool IsIdentity(std::uint32_t entryId)
 }
 }
 
+std::vector<std::uint32_t> SpecializationSlotRecord(SpecializationSlot const& slot)
+{
+    std::vector<std::uint32_t> record = { 1, slot.ClassId, slot.SpecId, std::uint32_t(slot.Entries.size()) };
+    for (KnownEntry const& entry : slot.Entries)
+    {
+        record.push_back(entry.EntryId);
+        record.push_back(entry.Rank);
+    }
+    record.push_back(std::uint32_t(slot.Actions.size()));
+    for (auto const& [button, action] : slot.Actions)
+    {
+        record.push_back(button);
+        record.push_back(action);
+    }
+    return record;
+}
+
+bool ParseSpecializationSlot(std::vector<std::uint32_t> const& record, SpecializationSlot& slot)
+{
+    if (record.size() < 5 || record[0] != 1 || record[1] < 12 || record[1] > 32 ||
+        record[3] > (record.size() - 5) / 2)
+        return false;
+
+    SpecializationSlot parsed;
+    parsed.ClassId = record[1];
+    parsed.SpecId = record[2];
+    std::size_t cursor = 4;
+    for (std::size_t index = 0; index < record[3]; ++index, cursor += 2)
+        parsed.Entries.push_back({ record[cursor], record[cursor + 1] });
+
+    std::uint32_t const actions = record[cursor++];
+    if (actions > (record.size() - cursor) / 2)
+        return false;
+    std::unordered_set<std::uint32_t> buttons;
+    for (std::uint32_t index = 0; index < actions; ++index, cursor += 2)
+    {
+        if (record[cursor] >= 144 || !record[cursor + 1] || !buttons.insert(record[cursor]).second)
+            return false;
+        parsed.Actions.emplace_back(record[cursor], record[cursor + 1]);
+    }
+    if (std::any_of(record.begin() + cursor, record.end(), [](std::uint32_t value) { return value != 0; }))
+        return false;
+    slot = std::move(parsed);
+    return true;
+}
+
 std::uint32_t KnownRank(AscensionCompatData::CoATalentEntry const& entry, HasSpell const& hasSpell)
 {
     std::uint32_t rank = 0;

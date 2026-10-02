@@ -56,7 +56,7 @@ and the specialization stay. Clients reach them only through the native packets 
 
 ## Stored builds
 
-Ascension keeps a build per specialization and swaps between them. A switch here removes every talent spell,
+Each specialization slot keeps a build per archetype and swaps between them. A switch here removes every talent spell,
 so `SwitchSpecialization` first writes down the build being left (`StoreBuilds`: the shared class tree and the
 specialization's own tree, paid and free-choice ranks read from the spellbook as `entryId * 10 + rank`) in the
 player settings `core.ascension_build.<spec>` (0 for the class tree, index 0 = count), then puts back the build
@@ -65,13 +65,39 @@ character can no longer afford is skipped, then runs the progression pass. Enter
 none restores the same way. While a specialization is active the spellbook stays the truth; the record is
 only read on entry, never at login, so a rank the player removed is not resurrected. Idea from #4031.
 
+## Specialization slots and Tomes
+
+CoA classes use the original 20-slot client container. Slot I is unlocked on login; Tomes II–XX teach the
+remaining spells in `AscensionWildcard::SPECIALIZATION_SWAP_SPELLS`. Reading a Tome requires the previous
+unlock, consumes the item on success and leaves the active build untouched. Already-owned unlocks refuse
+item use. The pending world migration restores the original `ItemAddon.dbc` / `ItemSpells.dbc` mappings,
+creates the four missing server templates for Tomes IX–XII and stocks the existing Bazaar vendor.
+
+Casting an unlocked slot's original spell runs its normal five-second cast and interruptions. The server
+intercepts `SPELL_EFFECT_TALENT_SPEC_SELECT`, validates the target build with the native upload rules, then
+saves the outgoing archetype, purchased/free-choice ranks and all packed action buttons. New slots have no
+archetype or purchases. Saved builds must fit the character's current level and point budget; a refusal
+preserves the active slot. Archetype switching guards also apply when entering an empty slot.
+
+`core.ascension_slot.active` stores the active index. `core.ascension_slot.<index>` holds a versioned record
+with class, archetype, entries and actions, without a fixed entry cap. The active slot is refreshed on every
+player save. A slot switch saves spells, action buttons and settings through the normal character transaction;
+login reads the active spellbook and action bar rather than reapplying a stale snapshot. Slot I retains the
+legacy `core.ascension_build.<spec>` / `core.ascension_bar.<spec>` archetype histories; the other slots use
+`core.ascension_slot.<index>.build.<spec>` / `.bar.<spec>` so histories cannot leak between slots. Class
+changes invalidate all these records and reset the active slot, preserving purchased unlock spells.
+
+These slots use the existing native packets and client spells. They do not implement named loadout requests
+`0x0778`–`0x077A` or the Mystic Enchant profiles also mentioned in the original Tome descriptions.
+
 ## The client's character-advancement service (Extensions.dll)
 
 Opcodes and layouts come from the reconstructed `Extensions.dll` (`firstoni-dev/ascension-extensions-reconstruction`,
 `docs/DLL_REFERENCE.md`, module `AscCAMgr`); the client build is the authority.
 
 - `SMSG 0x0725` active specialization: `u32 slotIndex, u32 slotCount`. Its first arrival builds the
-  per-character container the next packet needs, so it always goes first. The server sends slot 0 of 1. The
+  per-character container the next packet needs, so it always goes first. CoA classes receive the active index
+  and capacity 20; the original learned spells gate access to locked slots. The
   client does not read the specialization from it: `GetActiveChrSpec` is the first `ChrSpecs` row whose identity
   entry (+0x70, `CoASpecialization::IdentityEntryId`) the build holds.
 - `SMSG 0x0726` known entries: `u32 count`, then `u32 entryId, u32 rank, u32 0, u8 0, u32 0, u32 0` per record.
@@ -104,7 +130,8 @@ Opcodes and layouts come from the reconstructed `Extensions.dll` (`firstoni-dev/
   or `CA_PURGE_TALENTS_NO_KNOWN_TALENTS` when nothing was removed. The CoA talent frame resets through
   `ClearPendingBuild` and an upload instead.
 - `CMSG 0x06E1` inspect (`C_CharacterAdvancement.InspectUnit`, u64 guid): `SMSG 0x06E2` answers a `CA_INSPECT_*`
-  string; on `CA_INSPECT_OK` the guid, active slot 0, one slot and the target's known entries in the 0x0726 layout.
+  string; on `CA_INSPECT_OK` the guid, active slot index, slot capacity and the target's known entries in the
+  0x0726 layout.
   Missing, not-in-world and out-of-range (`INSPECT_DISTANCE`) targets get their own results.
 - Timing: the client keys this state off its local player object, which does not exist during the loading
   screen. `OnPlayerLogin` only queues the state; the first `CMSG_SET_ACTIVE_MOVER` of the session sends it
@@ -121,8 +148,10 @@ Opcodes and layouts come from the reconstructed `Extensions.dll` (`firstoni-dev/
 
 - `python -B tools/verify_all.py --stages harness --harness talent_state`: budgets, rank derivation, point
   accounting, packet layout, upload parsing and the specialization each upload selects, compiled against the
-  real catalog.
+  real catalog, plus uncapped slot record serialization and malformed-record rejection.
 - Gameplay scenarios pick specializations and ranks with the `specialization` and `advancement_rank` actions,
   which inject the same 0x0727 upload through the early packet hook.
+- `character-advancement-specialization-*` scenarios cover independent builds, full action bars, native
+  cast refusals, all Tome unlocks, large saved builds, real database relogs and class-change invalidation.
 - Ghost `e2e/coa/talents/authority_test.go`: persistence across a relog, budget refusal, reset, the 0x0725/0x0726
   sequence and the 0x0727 upload against a running slot.

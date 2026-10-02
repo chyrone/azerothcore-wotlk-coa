@@ -227,6 +227,34 @@ int main(int, char** argv)
               "a native Bloodmage archetype switch fits the level-eleven point budget");
     }
 
+    SpecializationSlot saved;
+    saved.ClassId = 20;
+    saved.SpecId = 99;
+    for (std::uint32_t id = 1; id <= 80; ++id)
+        saved.Entries.push_back({ id, id % 3 + 1 });
+    saved.Actions = { { 11, 804197 }, { 143, 0x40000001 } };
+    auto record = SpecializationSlotRecord(saved);
+    SpecializationSlot restored;
+    Check(ParseSpecializationSlot(record, restored) && restored.Entries.size() == 80 &&
+              restored.Entries.back().EntryId == 80 && restored.Actions == saved.Actions,
+          "slot records preserve more than 32 rows and complete packed action buttons");
+    record.push_back(0);
+    Check(ParseSpecializationSlot(record, restored), "slot records accept cleared storage tails");
+    record.back() = 1;
+    Check(!ParseSpecializationSlot(record, restored), "slot records reject unknown trailing data");
+    record = SpecializationSlotRecord(saved);
+    record[3] = 0xFFFFFFFF;
+    Check(!ParseSpecializationSlot(record, restored), "slot records reject overflowing row counts");
+    record = SpecializationSlotRecord(saved);
+    record.pop_back();
+    Check(!ParseSpecializationSlot(record, restored), "slot records reject truncated action bars");
+    record = SpecializationSlotRecord(saved);
+    record[0] = 2;
+    Check(!ParseSpecializationSlot(record, restored), "slot records reject unknown revisions");
+    saved.Actions = { { 11, 804197 }, { 11, 801955 } };
+    Check(!ParseSpecializationSlot(SpecializationSlotRecord(saved), restored),
+          "slot records reject duplicated action buttons");
+
     return failures ? 1 : 0;
 }
 """

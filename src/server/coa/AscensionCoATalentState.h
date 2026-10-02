@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <utility>
 #include <vector>
 
 namespace AscensionCoATalentState
@@ -19,6 +20,18 @@ struct KnownEntry
     bool Locked = false;
     std::uint32_t LearnOrder = 0;
 };
+
+struct SpecializationSlot
+{
+    std::uint32_t ClassId = 0;
+    std::uint32_t SpecId = 0;
+    std::vector<KnownEntry> Entries;
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> Actions;
+};
+
+std::vector<std::uint32_t> SpecializationSlotRecord(SpecializationSlot const& slot);
+
+bool ParseSpecializationSlot(std::vector<std::uint32_t> const& record, SpecializationSlot& slot);
 
 std::uint32_t KnownRank(AscensionCompatData::CoATalentEntry const& entry, HasSpell const& hasSpell);
 
