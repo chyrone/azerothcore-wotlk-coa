@@ -1864,17 +1864,17 @@ public:
     return itr == _activeSpecializations.end() ? 0 : itr->second;
   }
 
-  static uint32 ActiveSlot(Player const* player)
-  {
-    auto const* values = player->FindPlayerSettings("core.ascension_slot.active");
-    uint32 const slot = values && !values->empty() ? (*values)[0].value : 0;
-    return slot < AscensionWildcard::SPECIALIZATION_COUNT ? slot : 0;
-  }
+    static uint32 ActiveSlot(Player const* player)
+    {
+        auto const* values = player->FindPlayerSettings("core.ascension_slot.active");
+        uint32 const slot = values && !values->empty() ? (*values)[0].value : 0;
+        return slot < AscensionWildcard::SPECIALIZATION_COUNT ? slot : 0;
+    }
 
-  static std::string SlotSetting(uint32 slot)
-  {
-    return "core.ascension_slot." + std::to_string(slot);
-  }
+    static std::string SlotSetting(uint32 slot)
+    {
+        return "core.ascension_slot." + std::to_string(slot);
+    }
 
   static std::string BuildSetting(Player const* player, uint32 specializationId)
   {
@@ -2124,124 +2124,125 @@ public:
     return true;
   }
 
-  static AscensionCoATalentState::SpecializationSlot LiveSlot(Player* player, uint32 specializationId)
-  {
-    AscensionCoATalentState::SpecializationSlot slot;
-    slot.ClassId = player->getClass();
-    slot.SpecId = specializationId;
-    for (uint32 tree : { uint32(0), specializationId })
+    static AscensionCoATalentState::SpecializationSlot LiveSlot(Player* player, uint32 specializationId)
     {
-      for (uint32 pick : LivePicks(player, tree))
-        slot.Entries.push_back({ pick / 10, pick % 10 });
-      if (!specializationId)
-        break;
-    }
-    for (uint8 button = 0; button < MAX_ACTION_BUTTONS; ++button)
-      if (ActionButton const* action = player->GetActionButton(button))
-        slot.Actions.emplace_back(button, action->packedData);
-    return slot;
-  }
-
-  static void StoreSlot(Player* player, uint32 index, AscensionCoATalentState::SpecializationSlot const& slot)
-  {
-    std::string const setting = SlotSetting(index);
-    auto const record = AscensionCoATalentState::SpecializationSlotRecord(slot);
-    auto const* previous = player->FindPlayerSettings(setting);
-    std::size_t const size = previous ? previous->size() : 0;
-    for (std::size_t offset = 0; offset < std::max(size, record.size()); ++offset)
-      player->UpdatePlayerSetting(setting, uint32(offset), offset < record.size() ? record[offset] : 0);
-  }
-
-  void SaveSlot(Player* player)
-  {
-    if (IsAscensionCustomClass(player) && !AscensionWildcard::IsWildcardHero(player))
-      StoreSlot(player, ActiveSlot(player), LiveSlot(player, GetActiveSpecialization(player)));
-  }
-
-  void ClearSlots(Player* player)
-  {
-    {
-      std::lock_guard<std::mutex> lock(_stateLock);
-      _activeSpecializations[player->GetGUID().GetCounter()] = 0;
-    }
-    player->UpdatePlayerSetting(ASCENSION_ACTIVE_SPEC_SETTING, 0, 0);
-    player->UpdatePlayerSetting("core.ascension_slot.active", 0, 0);
-    std::unordered_set<uint32> trees = { 0 };
-    for (auto const& entry : AscensionCompatData::CoATalentEntries)
-      trees.insert(entry.SpecId);
-    for (uint32 slot = 0; slot < AscensionWildcard::SPECIALIZATION_COUNT; ++slot)
-    {
-      player->UpdatePlayerSetting(SlotSetting(slot), 0, 0);
-      for (uint32 tree : trees)
-      {
-        std::string const prefix = slot ? SlotSetting(slot) : "core.ascension";
-        for (std::string const& setting : { prefix + (slot ? ".build." : "_build.") + std::to_string(tree),
-                                          prefix + (slot ? ".bar." : "_bar.") + std::to_string(tree) })
-          if (player->FindPlayerSettings(setting))
-            player->UpdatePlayerSetting(setting, 0, 0);
-      }
-    }
-  }
-
-  void SendActiveSlot(Player* player)
-  {
-    {
-      std::lock_guard<std::mutex> lock(_stateLock);
-      if (!_advancementSent.count(player->GetGUID().GetCounter()))
-        return;
-    }
-    WorldPacket packet(SMSG_CHARACTER_ADVANCEMENT_ACTIVE_SPEC, sizeof(uint32) * 2);
-    packet << ActiveSlot(player) << uint32(AscensionWildcard::SPECIALIZATION_COUNT);
-    player->SendDirectMessage(&packet);
-  }
-
-  bool SwitchSlot(Player* player, uint32 index, std::string& error)
-  {
-    if (!IsAscensionCustomClass(player) || AscensionWildcard::IsWildcardHero(player) ||
-        index >= AscensionWildcard::SPECIALIZATION_COUNT ||
-        !player->HasSpell(AscensionWildcard::SPECIALIZATION_SWAP_SPELLS[index]))
-    {
-      error = "That specialization slot is not unlocked.";
-      return false;
-    }
-    if (index == ActiveSlot(player))
-      return true;
-
-    AscensionCoATalentState::SpecializationSlot target;
-    if (auto const* stored = player->FindPlayerSettings(SlotSetting(index));
-        stored && !stored->empty() && (*stored)[0].value)
-    {
-      std::vector<uint32> values;
-      for (auto const& setting : *stored)
-        values.push_back(setting.value);
-      if (!AscensionCoATalentState::ParseSpecializationSlot(values, target) || target.ClassId != player->getClass())
-      {
-        error = "The saved specialization slot is invalid for this character.";
-        return false;
-      }
+        AscensionCoATalentState::SpecializationSlot slot;
+        slot.ClassId = player->getClass();
+        slot.SpecId = specializationId;
+        for (uint32 tree : { uint32(0), specializationId })
+        {
+            for (uint32 pick : LivePicks(player, tree))
+                slot.Entries.push_back({ pick / 10, pick % 10 });
+            if (!specializationId)
+                break;
+        }
+        for (uint8 button = 0; button < MAX_ACTION_BUTTONS; ++button)
+            if (ActionButton const* action = player->GetActionButton(button))
+                slot.Actions.emplace_back(button, action->packedData);
+        return slot;
     }
 
-    uint32 const previousIndex = ActiveSlot(player);
-    auto const previous = LiveSlot(player, GetActiveSpecialization(player));
-    UpdateEntriesRefusal refusal;
-    if (!ApplyKnownEntriesUpload(player, target.Entries, refusal, target.SpecId))
+    static void StoreSlot(Player* player, uint32 index, AscensionCoATalentState::SpecializationSlot const& slot)
     {
-      error = refusal.Detail;
-      return false;
+        std::string const setting = SlotSetting(index);
+        auto const record = AscensionCoATalentState::SpecializationSlotRecord(slot);
+        auto const* previous = player->FindPlayerSettings(setting);
+        std::size_t const size = previous ? previous->size() : 0;
+        for (std::size_t offset = 0; offset < std::max(size, record.size()); ++offset)
+            player->UpdatePlayerSetting(setting, uint32(offset), offset < record.size() ? record[offset] : 0);
     }
 
-    StoreSlot(player, previousIndex, previous);
-    player->SendActionButtons(2);
-    for (uint8 button = 0; button < MAX_ACTION_BUTTONS; ++button)
-      player->removeActionButton(button);
-    for (auto const& [button, action] : target.Actions)
-      player->addActionButton(uint8(button), ACTION_BUTTON_ACTION(action), uint8(ACTION_BUTTON_TYPE(action)));
-    player->UpdatePlayerSetting("core.ascension_slot.active", 0, index);
-    player->SaveToDB(false, false);
-    player->SendActionButtons(1);
-    SendCharacterAdvancementState(player);
-    return true;
-  }
+    void SaveSlot(Player* player)
+    {
+        if (IsAscensionCustomClass(player) && !AscensionWildcard::IsWildcardHero(player))
+            StoreSlot(player, ActiveSlot(player), LiveSlot(player, GetActiveSpecialization(player)));
+    }
+
+    void ClearSlots(Player* player)
+    {
+        {
+            std::lock_guard<std::mutex> lock(_stateLock);
+            _activeSpecializations[player->GetGUID().GetCounter()] = 0;
+        }
+        player->UpdatePlayerSetting(ASCENSION_ACTIVE_SPEC_SETTING, 0, 0);
+        player->UpdatePlayerSetting("core.ascension_slot.active", 0, 0);
+        std::unordered_set<uint32> trees = { 0 };
+        for (auto const& entry : AscensionCompatData::CoATalentEntries)
+            trees.insert(entry.SpecId);
+        for (uint32 slot = 0; slot < AscensionWildcard::SPECIALIZATION_COUNT; ++slot)
+        {
+            player->UpdatePlayerSetting(SlotSetting(slot), 0, 0);
+            for (uint32 tree : trees)
+            {
+                std::string const prefix = slot ? SlotSetting(slot) : "core.ascension";
+                for (std::string const& setting : { prefix + (slot ? ".build." : "_build.") + std::to_string(tree),
+                                                  prefix + (slot ? ".bar." : "_bar.") + std::to_string(tree) })
+                    if (player->FindPlayerSettings(setting))
+                        player->UpdatePlayerSetting(setting, 0, 0);
+            }
+        }
+    }
+
+    void SendActiveSlot(Player* player)
+    {
+        {
+            std::lock_guard<std::mutex> lock(_stateLock);
+            if (!_advancementSent.count(player->GetGUID().GetCounter()))
+                return;
+        }
+        WorldPacket packet(SMSG_CHARACTER_ADVANCEMENT_ACTIVE_SPEC, sizeof(uint32) * 2);
+        packet << ActiveSlot(player) << uint32(AscensionWildcard::SPECIALIZATION_COUNT);
+        player->SendDirectMessage(&packet);
+    }
+
+    bool SwitchSlot(Player* player, uint32 index, std::string& error)
+    {
+        if (!IsAscensionCustomClass(player) || AscensionWildcard::IsWildcardHero(player) ||
+            index >= AscensionWildcard::SPECIALIZATION_COUNT ||
+            !player->HasSpell(AscensionWildcard::SPECIALIZATION_SWAP_SPELLS[index]))
+        {
+            error = "That specialization slot is not unlocked.";
+            return false;
+        }
+        if (index == ActiveSlot(player))
+            return true;
+
+        AscensionCoATalentState::SpecializationSlot target;
+        if (auto const* stored = player->FindPlayerSettings(SlotSetting(index));
+            stored && !stored->empty() && (*stored)[0].value)
+        {
+            std::vector<uint32> values;
+            for (auto const& setting : *stored)
+                values.push_back(setting.value);
+            if (!AscensionCoATalentState::ParseSpecializationSlot(values, target) ||
+                target.ClassId != player->getClass())
+            {
+                error = "The saved specialization slot is invalid for this character.";
+                return false;
+            }
+        }
+
+        uint32 const previousIndex = ActiveSlot(player);
+        auto const previous = LiveSlot(player, GetActiveSpecialization(player));
+        UpdateEntriesRefusal refusal;
+        if (!ApplyKnownEntriesUpload(player, target.Entries, refusal, target.SpecId))
+        {
+            error = refusal.Detail;
+            return false;
+        }
+
+        StoreSlot(player, previousIndex, previous);
+        player->SendActionButtons(2);
+        for (uint8 button = 0; button < MAX_ACTION_BUTTONS; ++button)
+            player->removeActionButton(button);
+        for (auto const& [button, action] : target.Actions)
+            player->addActionButton(uint8(button), ACTION_BUTTON_ACTION(action), uint8(ACTION_BUTTON_TYPE(action)));
+        player->UpdatePlayerSetting("core.ascension_slot.active", 0, index);
+        player->SaveToDB(false, false);
+        player->SendActionButtons(1);
+        SendCharacterAdvancementState(player);
+        return true;
+    }
 
     void UpdateClassTuning(Player* player, uint32 diff)
     {
@@ -6357,11 +6358,11 @@ public:
     }
   }
 
-  void OnPlayerSave(Player* player) override
-  {
-    if (ascensionCompatConfig.GetConfigValue<bool>(AscensionCompatConfig::ENABLED))
-      AscensionClassService::Instance().SaveSlot(player);
-  }
+    void OnPlayerSave(Player* player) override
+    {
+        if (ascensionCompatConfig.GetConfigValue<bool>(AscensionCompatConfig::ENABLED))
+            AscensionClassService::Instance().SaveSlot(player);
+    }
 
   void OnPlayerLevelChanged(Player *player, uint8) override {
     if (ascensionCompatConfig.GetConfigValue<bool>(
