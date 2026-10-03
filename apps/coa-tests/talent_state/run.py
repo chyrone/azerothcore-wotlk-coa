@@ -207,6 +207,54 @@ int main(int, char** argv)
         }
     }
 
+    CoATalentEntry const* sanguineIdentity = Find(4025);
+    CoATalentEntry const* sanguineSignature = Find(29543);
+    CoATalentEntry const* eternalSignature = Find(31117);
+    Check(sanguineIdentity && sanguineSignature && eternalSignature,
+          "Bloodmage archetypes have their native identity and shared signature entries");
+    if (sanguineIdentity && sanguineSignature && eternalSignature)
+    {
+        std::set<std::uint32_t> spellbook = { sanguineIdentity->SpellIds[0], sanguineSignature->SpellIds[0] };
+        std::vector<KnownEntry> const entering = SpecializationSwitch(20,
+            [&spellbook](std::uint32_t id) { return spellbook.contains(id); }, 99);
+        Check(std::none_of(entering.begin(), entering.end(),
+                  [](KnownEntry const& item) { return item.EntryId == 29543; }),
+              "leaving Sanguine removes its shared signature from the native upload");
+        Check(std::any_of(entering.begin(), entering.end(),
+                  [](KnownEntry const& item) { return item.EntryId == 31117 && item.Rank == 1; }),
+              "entering Eternal uploads Blood Pact at rank one");
+        Check(Spent(entering).AE == 1 && Spent(entering).TE == 0,
+              "a native Bloodmage archetype switch fits the level-eleven point budget");
+    }
+
+    SpecializationSlot saved;
+    saved.ClassId = 20;
+    saved.SpecId = 99;
+    for (std::uint32_t id = 1; id <= 80; ++id)
+        saved.Entries.push_back({ id, id % 3 + 1 });
+    saved.Actions = { { 11, 804197 }, { 143, 0x40000001 } };
+    auto record = SpecializationSlotRecord(saved);
+    SpecializationSlot restored;
+    Check(ParseSpecializationSlot(record, restored) && restored.Entries.size() == 80 &&
+              restored.Entries.back().EntryId == 80 && restored.Actions == saved.Actions,
+          "slot records preserve more than 32 rows and complete packed action buttons");
+    record.push_back(0);
+    Check(ParseSpecializationSlot(record, restored), "slot records accept cleared storage tails");
+    record.back() = 1;
+    Check(!ParseSpecializationSlot(record, restored), "slot records reject unknown trailing data");
+    record = SpecializationSlotRecord(saved);
+    record[3] = 0xFFFFFFFF;
+    Check(!ParseSpecializationSlot(record, restored), "slot records reject overflowing row counts");
+    record = SpecializationSlotRecord(saved);
+    record.pop_back();
+    Check(!ParseSpecializationSlot(record, restored), "slot records reject truncated action bars");
+    record = SpecializationSlotRecord(saved);
+    record[0] = 2;
+    Check(!ParseSpecializationSlot(record, restored), "slot records reject unknown revisions");
+    saved.Actions = { { 11, 804197 }, { 11, 801955 } };
+    Check(!ParseSpecializationSlot(SpecializationSlotRecord(saved), restored),
+          "slot records reject duplicated action buttons");
+
     return failures ? 1 : 0;
 }
 """
